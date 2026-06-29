@@ -2,7 +2,7 @@
   ************************************* Copyright ****************************** 
   * FileName   : Nautilus_Vision.c   
   * Version    : v1.0		
-  * Author     : Íõ×ÓÅå
+  * Author     : ç‹å­ä½©
   * Number     : 18602780430 	
   * Date       : 2023-12-26         
   * Description:    
@@ -31,8 +31,8 @@ Rx_Data_t Rx_Data;
 
 /**
   * @Name    Recive_Data_Handle
-  * @brief   Ëã·¨½ÓÊÕĞÅÏ¢´¦Àí
-  * @param   buff: [ÊäÈë/³ö] 
+  * @brief   ç®—æ³•æ¥æ”¶ä¿¡æ¯å¤„ç†
+  * @param   buff: [è¾“å…¥/å‡º] 
   * @Data    2023-12-26
 */
 uint8_t buffr[60];
@@ -167,7 +167,7 @@ int8_t Last_navi_point = -2;  // TODO
 
 /**
   * @Name    Serial_Sand_Data
-* @brief     Êı¾İ·¢ËÍ
+* @brief     æ•°æ®å‘é€
   * @param   None
   * @Data    2023-12-26
 */
@@ -199,8 +199,8 @@ void Serial_Send_Data(Auto_t*auto_data,Chassis_Move_t*Move,Tx_Data_t *data)
 
 /**
   * @Name    Serial_Data_Handle
-  * @brief   ´®¿ÚÊı¾İ´¦Àí
-  * @param   Chassis_Move_t*Move: [ÊäÈë/³ö] 
+  * @brief   ä¸²å£æ•°æ®å¤„ç†
+  * @param   Chassis_Move_t*Move: [è¾“å…¥/å‡º] 
   * @Data    2023-12-26
 */
 float X_test,Y_test;

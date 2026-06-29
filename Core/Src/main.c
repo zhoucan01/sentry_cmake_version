@@ -44,6 +44,7 @@
 #include "CAN_receive.h"
 
 #include "remote_control.h"
+#include "message_center.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -126,6 +127,9 @@ int main(void)
     while (BMI088_init(&hspi1, 1) != BMI088_NO_ERROR);
     
     Start_PIN_int();
+
+    /* 初始化 message_center（必须在调度器启动前） */
+    MessageCenterInit();
 
   /* USER CODE END 2 */
 

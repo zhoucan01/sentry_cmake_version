@@ -44,13 +44,13 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
-    # ==================== application ²ã ====================
+    # ==================== application ï¿½ï¿½ ====================
     application/CAN_receive.c
     application/CAN_transmit.c
     application/ins_task.c
     application/remote_control.c
 
-    # ==================== branch ²ã ====================
+    # ==================== branch ï¿½ï¿½ ====================
     branch/chassis_control.c
     branch/decision.c
     branch/gimbal_big_yaw.c
@@ -59,7 +59,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     branch/small_gimbal.c
     branch/system.c
 
-    # ==================== bsp/boards ²ã ====================
+    # ==================== bsp/boards ï¿½ï¿½ ====================
     bsp/boards/bsp_can.c
     bsp/boards/bsp_delay.c
     bsp/boards/bsp_dwt.c
@@ -71,7 +71,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     bsp/boards/bsp_transmit.c
     bsp/boards/kalman.c
 
-    # ==================== Components ²ã ====================
+    # ==================== Components ï¿½ï¿½ ====================
     Components/kalman_filter.c
     Components/user_lib.c
     Components/Algorithm/QuaternionEKF.c
@@ -80,26 +80,30 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Components/Devices/BMI088Middleware.c
     Components/Devices/transfer_function.c
 
-    # ==================== essemi µ÷ÊÔ´òÓ¡ ====================
+    # ==================== essemi ï¿½ï¿½ï¿½Ô´ï¿½Ó¡ ====================
     essemi/essemi_swd_print.c
     essemi/essemi_swd_print_printf.c
 
-    # ==================== Nautilus Ä£¿é ====================
+    # ==================== Nautilus Ä£ï¿½ï¿½ ====================
     Nautilus_UI/Nautilus_UI.c
     Nautilus_UI/Sentry_cmd.c
     Nautilus_Vision/Nautilus_Vision.c
 
-    # ==================== referee ²ÃÅÐÏµÍ³ ====================
+    # ==================== referee ï¿½ï¿½ï¿½ï¿½ÏµÍ³ ====================
     referee/bsp_usart.c
     referee/CRC8_CRC16.c
     referee/fifo.c
     referee/referee_usart_task.c
     referee/referee.c
+
+    # message_center module
+    modules/message_center/message_center.c
 )
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
-    # ==================== ÓÃ»§Í·ÎÄ¼þÂ·¾¶ ====================
+    # ==================== ï¿½Ã»ï¿½Í·ï¿½Ä¼ï¿½Â·ï¿½ï¿½ ====================
+    modules/message_center
     application
     branch
     bsp/boards
@@ -116,11 +120,11 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
 
 # Add project symbols (macros)
 target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
-    # FPU Ïà¹Ø (¶ÔÓ¦ Keil ÖÐµÄ __FPU_USED=1U, __FPU_PRESENT=1U)
+    # FPU ï¿½ï¿½ï¿½ (ï¿½ï¿½Ó¦ Keil ï¿½Ðµï¿½ __FPU_USED=1U, __FPU_PRESENT=1U)
     __FPU_USED=1U
     __FPU_PRESENT=1U
 
-    # CMSIS-DSP ºê¶¨Òå (Cortex-M4)
+    # CMSIS-DSP ï¿½ê¶¨ï¿½ï¿½ (Cortex-M4)
     ARM_MATH_CM4
     ARM_MATH_MATRIX_CHECK
     ARM_MATH_ROUNDING
@@ -129,16 +133,16 @@ target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
 # Remove wrong libob.a library dependency when using cpp files
 list(REMOVE_ITEM CMAKE_C_IMPLICIT_LINK_LIBRARIES ob)
 
-# ==================== CMSIS-DSP ¿â ====================
+# ==================== CMSIS-DSP ï¿½ï¿½ ====================
 set(CMSIS_DSP_Sources
-    # ¹«¹²±í£¨Èý½Çº¯Êý/¾ØÕóµÈ²é±íÊý¾Ý£©
+    # ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Çºï¿½ï¿½ï¿½/ï¿½ï¿½ï¿½ï¿½È²ï¿½ï¿½ï¿½ï¿½ï¿½Ý£ï¿½
     Drivers/CMSIS/DSP/Source/CommonTables/arm_common_tables.c
 
-    # ¿ìËÙÊýÑ§º¯Êý
+    # ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ñ§ï¿½ï¿½ï¿½ï¿½
     Drivers/CMSIS/DSP/Source/FastMathFunctions/arm_cos_f32.c
     Drivers/CMSIS/DSP/Source/FastMathFunctions/arm_sin_f32.c
 
-    # ¾ØÕóÔËËã
+    # ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     Drivers/CMSIS/DSP/Source/MatrixFunctions/arm_mat_init_f32.c
     Drivers/CMSIS/DSP/Source/MatrixFunctions/arm_mat_mult_f32.c
     Drivers/CMSIS/DSP/Source/MatrixFunctions/arm_mat_add_f32.c
@@ -159,8 +163,8 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
     # Add user defined libraries
 )
 
-# ==================== ÉÕÂ¼Ä¿±ê (ST-Link) ====================
-# ÓÃ·¨: cmake --build build/Debug --target flash
+# ==================== ï¿½ï¿½Â¼Ä¿ï¿½ï¿½ (ST-Link) ====================
+# ï¿½Ã·ï¿½: cmake --build build/Debug --target flash
 add_custom_target(hex DEPENDS ${CMAKE_PROJECT_NAME}
     COMMAND ${CMAKE_OBJCOPY} -O ihex $<TARGET_FILE:${CMAKE_PROJECT_NAME}> ${CMAKE_PROJECT_NAME}.hex
     COMMENT "Generating ${CMAKE_PROJECT_NAME}.hex"

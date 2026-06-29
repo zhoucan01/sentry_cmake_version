@@ -14,7 +14,7 @@ typedef struct
   float max_wz;
 }sentry_chassis_t;
 
-/*******¹¦ÂÊ********/
+/*******åŠŸç‡********/
 #define POWER_40_W    40
 #define POWER_45_W    45
 #define POWER_50_W    50

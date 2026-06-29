@@ -24,7 +24,7 @@
 
 typedef struct
 {
-    uint8_t Order; //ÏµÍ³½×Êý
+    uint8_t Order; //ç³»ç»Ÿé˜¶æ•°
 
     double *NUM;
     double *DEN;

@@ -2,22 +2,22 @@
   ******************************************************************************
   * @file           : decision.c
   * @version        : v2.1
-  * @author         : ÖÜ²Ó
+  * @author         : å‘¨ç¿
   * @date           : 2025-8-1
-  * @brief          : ÉÚ±øµç¿Ø¾ö²ßÄ£¿é
+  * @brief          : å“¨å…µç”µæ§å†³ç­–æ¨¡å—
   * @attention      :
-  *   ºêÅäÖÃËµÃ÷:
-  *     - RED_START_NAVIGATION   ºì·½ÆğÊ¼½¨Í¼(ÇĞ»»ºìÀ¶·½Ê±ĞŞ¸Ä)
-  *     - if_shoot_Engineer      ÊÇ·ñ»÷´ò¹¤³Ì(Ã¿³¡Ç°È·¶¨)
-  *   ×ø±êÏµËµÃ÷:
-  *     1. ÔÆÌ¨ÊÖ±êµã×ø±ê     -> map_control_fill()
-  *     2. Ğ¡µØÍ¼Â·¾¶ÌáÊ¾     -> Path_display
-  *     3. µ¼º½µãÍÆËÍ         -> Navigation_Tx_Send(&navigation_tx)
-  *     4. ÉÚ±øÎ»ÖÃÎªÀï³Ì¼Æ×ø±ê(Ïà¶Ô³ÌĞòÆğÊ¼µã¶ø·ÇÁãµã)
+  *   å®é…ç½®è¯´æ˜:
+  *     - RED_START_NAVIGATION   çº¢æ–¹èµ·å§‹å»ºå›¾(åˆ‡æ¢çº¢è“æ–¹æ—¶ä¿®æ”¹)
+  *     - if_shoot_Engineer      æ˜¯å¦å‡»æ‰“å·¥ç¨‹(æ¯åœºå‰ç¡®å®š)
+  *   åæ ‡ç³»è¯´æ˜:
+  *     1. äº‘å°æ‰‹æ ‡ç‚¹åæ ‡     -> map_control_fill()
+  *     2. å°åœ°å›¾è·¯å¾„æç¤º     -> Path_display
+  *     3. å¯¼èˆªç‚¹æ¨é€         -> Navigation_Tx_Send(&navigation_tx)
+  *     4. å“¨å…µä½ç½®ä¸ºé‡Œç¨‹è®¡åæ ‡(ç›¸å¯¹ç¨‹åºèµ·å§‹ç‚¹è€Œéé›¶ç‚¹)
   ******************************************************************************
   */
 
-/* ============================== Í·ÎÄ¼ş°üº¬ ============================== */
+/* ============================== å¤´æ–‡ä»¶åŒ…å« ============================== */
 #include "decision.h"
 #include "bsp_transmit.h"
 #include "cmsis_os.h"
@@ -34,72 +34,84 @@
 #include "math.h"
 #include "ins_task.h"
 #include "Sentry_cmd.h"
+#include "message_center.h"
+#include "big_yaw_topics.h"
 
-/* ======================== ±àÒë¿ª¹Ø ======================== */
-#define RED_START_NAVIGATION     /* ºì·½½¨Í¼(À¶·½½¨Í¼Ê±×¢ÊÍ´ËĞĞ) */
-//#define if_shoot_Engineer       /* ÊÇ·ñ»÷´ò¹¤³Ì³µ(Ã¿³¡Ç°È·¶¨) */
+/* ======================== ç¼–è¯‘å¼€å…³ ======================== */
+#define RED_START_NAVIGATION     /* çº¢æ–¹å»ºå›¾(è“æ–¹å»ºå›¾æ—¶æ³¨é‡Šæ­¤è¡Œ) */
+//#define if_shoot_Engineer       /* æ˜¯å¦å‡»æ‰“å·¥ç¨‹è½¦(æ¯åœºå‰ç¡®å®š) */
 
-/* ======================== È«¾Ö±äÁ¿¶¨Òå ======================== */
+/* ======================== å…¨å±€å˜é‡å®šä¹‰ ======================== */
 
-/* ¾ö²ßºËĞÄÊµÀı */
+/* å†³ç­–æ ¸å¿ƒå®ä¾‹ */
 decision_t   decision;
 Sentry_cmd_t Sentry_cmd_send;
 
-/* µ¼º½µãÎ»×ø±ê±í(È«¾Ö×ø±êÏµ, 14¸öµãÎ») */
+/* message_center handles */
+static Publisher_t  *decision_pub = NULL;
+static Publisher_t  *nav_tx_pub = NULL;
+static Subscriber_t *game_state_sub = NULL;
+static Subscriber_t *robot_status_sub = NULL;
+
+/* local copies of subscribed data */
+static game_state_t   game_state_local;
+static robot_status_t robot_status_local;
+
+/* å¯¼èˆªç‚¹ä½åæ ‡è¡¨(å…¨å±€åæ ‡ç³», 14ä¸ªç‚¹ä½) */
 float Red_Navi_position[DECISION_POSITION_NUM][2] =
 {
-    {  0.00f,  0.00f },   /* [ 0] ³õÊ¼»¯·ÅÖÃµã */
-    {  2.42f, -2.35f },   /* [ 1] ¼º·½²¹¸øÇø(ÑµÁ·) */
-    { 10.35f, 14.27f },   /* [ 2] ¼º·½·ÉÆÂÂäµã */
-    {  8.50f,  7.50f },   /* [ 3] ¼º·½±¤Àİ */
-    {  8.50f,  7.50f },   /* [ 4] ¼º·½·ÀÊØµã */
-    {  6.65f,  9.10f },   /* [ 5] ¼º·½±¤ÀİÇ°·½ */
-    {  6.28f,  6.84f },   /* [ 6] ¼º·½±¤ÀİÓÒ²à */
-    { 15.75f,  9.39f },   /* [ 7] µĞ·½Ç°ÉÚÕ¾ */
-    { 21.18f,  5.67f },   /* [ 8] µĞ·½Ó¢ĞÛ´òÇ°ÉÚÕ¾·À»¤µã */
-    { 23.80f,  7.59f },   /* [ 9] µĞ·½Ó¢ĞÛµõÉä·À»¤µã */
-    { 11.43f,  4.36f },   /* [10] ¼º·½Ç°ÉÚÕ¾ */
-    { 21.18f,  5.67f },   /* [11] µĞ·½±¤Àİ */
-    {  4.00f, -3.00f },   /* [12] ¸ßµØ±³µĞ´¦(ÑµÁ·) */
-    {  8.90f,  7.50f },   /* [13] ÔÆÌ¨ÊÖ±êµã */
+    {  0.00f,  0.00f },   /* [ 0] åˆå§‹åŒ–æ”¾ç½®ç‚¹ */
+    {  2.42f, -2.35f },   /* [ 1] å·±æ–¹è¡¥ç»™åŒº(è®­ç»ƒ) */
+    { 10.35f, 14.27f },   /* [ 2] å·±æ–¹é£å¡è½ç‚¹ */
+    {  8.50f,  7.50f },   /* [ 3] å·±æ–¹å ¡å’ */
+    {  8.50f,  7.50f },   /* [ 4] å·±æ–¹é˜²å®ˆç‚¹ */
+    {  6.65f,  9.10f },   /* [ 5] å·±æ–¹å ¡å’å‰æ–¹ */
+    {  6.28f,  6.84f },   /* [ 6] å·±æ–¹å ¡å’å³ä¾§ */
+    { 15.75f,  9.39f },   /* [ 7] æ•Œæ–¹å‰å“¨ç«™ */
+    { 21.18f,  5.67f },   /* [ 8] æ•Œæ–¹è‹±é›„æ‰“å‰å“¨ç«™é˜²æŠ¤ç‚¹ */
+    { 23.80f,  7.59f },   /* [ 9] æ•Œæ–¹è‹±é›„åŠå°„é˜²æŠ¤ç‚¹ */
+    { 11.43f,  4.36f },   /* [10] å·±æ–¹å‰å“¨ç«™ */
+    { 21.18f,  5.67f },   /* [11] æ•Œæ–¹å ¡å’ */
+    {  4.00f, -3.00f },   /* [12] é«˜åœ°èƒŒæ•Œå¤„(è®­ç»ƒ) */
+    {  8.90f,  7.50f },   /* [13] äº‘å°æ‰‹æ ‡ç‚¹ */
 };
 
-/* ======================== ÄÚ²¿×´Ì¬±äÁ¿ ======================== */
+/* ======================== å†…éƒ¨çŠ¶æ€å˜é‡ ======================== */
 
-/* --- ÊÜ»÷¼ÆÊ± --- */
+/* --- å—å‡»è®¡æ—¶ --- */
 static int hurt_time = 0;
 
-/* --- µ¼º½µ½´ïÅĞ¶Ï --- */
+/* --- å¯¼èˆªåˆ°è¾¾åˆ¤æ–­ --- */
 static uint8_t  if_close_to_des = 0;
 static float    navigation_x, navigation_y;
 static float    current_x, current_y;
 
-/* --- ²¹¸øÏà¹Ø --- */
+/* --- è¡¥ç»™ç›¸å…³ --- */
 static uint16_t last_allowance_17  = 300;
 static uint16_t allow_to_get_17mm  = 0;
 static uint16_t already_allowance_17 = 0;
 static uint8_t  remain_time        = 0;
 
-/* --- »ùµØ»¤¼× --- */
+/* --- åŸºåœ°æŠ¤ç”² --- */
 uint16_t last_dart_time   = 0;
 uint16_t lock_dart_count  = 0;
 uint8_t  if_random_dart   = 0;
 
-/* --- »ùµØµõÉäÅĞ¶Ï --- */
+/* --- åŸºåœ°åŠå°„åˆ¤æ–­ --- */
 uint16_t Last_base_hurt_time = 420;
 
-/* --- µĞ·½Ğ¡ÄÜÁ¿»ú¹Ø --- */
+/* --- æ•Œæ–¹å°èƒ½é‡æœºå…³ --- */
 static uint16_t enemy_small_energy_time = 500;
 
 /* ================================================================
- *                    ºËĞÄÈÎÎñÓë³õÊ¼»¯
+ *                    æ ¸å¿ƒä»»åŠ¡ä¸åˆå§‹åŒ–
  * ================================================================ */
 
 /**
-  * @brief  ×ÔÖ÷¾ö²ßÖ÷ÈÎÎñ(FreeRTOSÏß³ÌÈë¿Ú)
-  * @param  argument : FreeRTOSÏß³Ì²ÎÊı(Î´Ê¹ÓÃ)
-  * @note   Ñ­»·ÖÜÆÚÔ¼1ms, ÒÀ´ÎÖ´ĞĞ:
-  *         ¾ö²ß×´Ì¬->Éä»÷¾ö²ß->²ÃÅĞÊı¾İ->Ö¸Áî´¦Àí->µ¼º½Ìî³ä->ÍÆËÍµ¼º½
+  * @brief  è‡ªä¸»å†³ç­–ä¸»ä»»åŠ¡(FreeRTOSçº¿ç¨‹å…¥å£)
+  * @param  argument : FreeRTOSçº¿ç¨‹å‚æ•°(æœªä½¿ç”¨)
+  * @note   å¾ªç¯å‘¨æœŸçº¦1ms, ä¾æ¬¡æ‰§è¡Œ:
+  *         å†³ç­–çŠ¶æ€->å°„å‡»å†³ç­–->è£åˆ¤æ•°æ®->æŒ‡ä»¤å¤„ç†->å¯¼èˆªå¡«å……->æ¨é€å¯¼èˆª
   */
 void Auto_run(void const *argument)
 {
@@ -111,6 +123,12 @@ void Auto_run(void const *argument)
     decision.Cmd_condition.if_update = 1;
     memset(&Sentry_cmd_send, 0, sizeof(Sentry_cmd_t));
 
+    /* register message_center pub/sub */
+    decision_pub    = PubRegister(TOPIC_DECISION_DATA, sizeof(decision_t));
+    nav_tx_pub      = PubRegister(TOPIC_NAV_TX, sizeof(navigation_tx_t));
+    game_state_sub  = SubRegister(TOPIC_GAME_STATE, sizeof(game_state_t));
+    robot_status_sub = SubRegister(TOPIC_ROBOT_STATUS, sizeof(robot_status_t));
+
 #ifdef if_shoot_Engineer
     Red_Navi_position[ENEMY_OUTPOST_PROTECT_POINT][0] = 12.09f;
     Red_Navi_position[ENEMY_OUTPOST_PROTECT_POINT][1] = 8.90f;
@@ -118,26 +136,35 @@ void Auto_run(void const *argument)
 
     for (;;)
     {
+        /* fetch latest subscribed data */
+        SubGetMessage(game_state_sub, &game_state_local);
+        SubGetMessage(robot_status_sub, &robot_status_local);
+
         Decison_State_Ctl(&decision);
         sentry_shoot_decision(&decision);
         get_referr_data();
         Sentry_cmd_decision(&decision);
         decision_point_fill();
         Navigation_Tx_Send(&navigation_tx);
+
+        /* publish decision_data and nav_tx */
+        PubPushMessage(decision_pub, (void *)&decision);
+        PubPushMessage(nav_tx_pub, (void *)&navigation_tx);
+
         vTaskDelay(1);
     }
 }
 
 /**
-  * @brief  ¸ù¾İÒ£¿ØÆ÷¿ª¹Ø×éºÏÑ¡Ôñ¾ö²ßÄ£Ê½
-  * @param  mode : ¾ö²ß½á¹¹ÌåÖ¸Õë
-  * @note   ½öÔÚ±ÈÈü½øĞĞÖĞ(game_progress==4)ÏìÓ¦Ò£¿ØÆ÷
-  *         ¿ª¹ØÓ³Éä: s_l=1,s_r=1¼¤½ø; s_l=3,s_r=3±£ÊØ;
-  *                   s_l=3,s_r=2·ÉÆÂ; s_l=3,s_r=1Ñ²Âß; s_l=1,s_r=3±£»¤
+  * @brief  æ ¹æ®é¥æ§å™¨å¼€å…³ç»„åˆé€‰æ‹©å†³ç­–æ¨¡å¼
+  * @param  mode : å†³ç­–ç»“æ„ä½“æŒ‡é’ˆ
+  * @note   ä»…åœ¨æ¯”èµ›è¿›è¡Œä¸­(game_progress==4)å“åº”é¥æ§å™¨
+  *         å¼€å…³æ˜ å°„: s_l=1,s_r=1æ¿€è¿›; s_l=3,s_r=3ä¿å®ˆ;
+  *                   s_l=3,s_r=2é£å¡; s_l=3,s_r=1å·¡é€»; s_l=1,s_r=3ä¿æŠ¤
   */
 void AGV_auto_mode(decision_t *mode)
 {
-    if (game_state.game_progress == 4)
+    if (game_state_local.game_progress == 4)
     {
         if (rc_ctrl.rc.s_l == 1 && rc_ctrl.rc.s_r == 1)
             mode->decision_mode = extreme;
@@ -157,14 +184,14 @@ void AGV_auto_mode(decision_t *mode)
 }
 
 /**
-  * @brief  ´Ó²ÃÅĞÏµÍ³»ñÈ¡»úÆ÷ÈËÑÕÉ«ĞÅÏ¢
-  * @note   ¸ù¾İrobot_idÅĞ¶Ï: 1~9ºì·½, >=101À¶·½, ÆäËûÎ´Á¬½Ó
+  * @brief  ä»è£åˆ¤ç³»ç»Ÿè·å–æœºå™¨äººé¢œè‰²ä¿¡æ¯
+  * @note   æ ¹æ®robot_idåˆ¤æ–­: 1~9çº¢æ–¹, >=101è“æ–¹, å…¶ä»–æœªè¿æ¥
   */
 void get_referr_data(void)
 {
-    if (robot_status.robot_id <= 9 && robot_status.robot_id > 0)
+    if (robot_status_local.robot_id <= 9 && robot_status_local.robot_id > 0)
         decision.robot_data.robot_color = red;
-    else if (robot_status.robot_id >= 101)
+    else if (robot_status_local.robot_id >= 101)
         decision.robot_data.robot_color = blue;
     else
         decision.robot_data.robot_color = NO_CONTACT;
@@ -179,21 +206,21 @@ static uint16_t Last_HP;
 static uint16_t Last_projectile_allowance_17mm;
 
 /* ================================================================
- *                   ÉÚ±ø×ÔÖ÷Ö¸Áî´¦Àí
+ *                   å“¨å…µè‡ªä¸»æŒ‡ä»¤å¤„ç†
  * ================================================================ */
 
 /**
-  * @brief  ÉÚ±ø×ÔÖ÷¾ö²ßÖ¸Áî´¦Àí(¸´»î/¶Ò»»µ¯Íè/¶Ò»»ÑªÁ¿)
+  * @brief  å“¨å…µè‡ªä¸»å†³ç­–æŒ‡ä»¤å¤„ç†(å¤æ´»/å…‘æ¢å¼¹ä¸¸/å…‘æ¢è¡€é‡)
   */
 void Sentry_cmd_decision(decision_t *mode)
 {
-    if (game_state.game_progress == 4)
+    if (game_state_local.game_progress == 4)
     {
         mode->Cmd_condition.Exchange_Projectile_Num = 0;
         mode->Cmd_condition.If_remote_exchange_HP  = 0;
         mode->Cmd_condition.If_Immediately_Revive   = 0;
 
-        if (robot_status.current_HP == 0 && Last_HP > 0)
+        if (robot_status_local.current_HP == 0 && Last_HP > 0)
             mode->Cmd_condition.Die_cnt++;
 
         mode->Cmd_condition.If_revive = 1;
@@ -204,7 +231,7 @@ void Sentry_cmd_decision(decision_t *mode)
                         mode->Cmd_condition.Exchange_Projectile_Num,
                         mode->Cmd_condition.If_remote_exchange_HP);
 
-        Last_HP = robot_status.current_HP;
+        Last_HP = robot_status_local.current_HP;
         Last_projectile_allowance_17mm = projectile_allowance.projectile_allowance_17mm;
     }
     else
@@ -219,7 +246,7 @@ void Sentry_cmd_decision(decision_t *mode)
 }
 
 /**
-  * @brief  ¾ö²ßÄ£¿é³õÊ¼»¯, ÉèÖÃ³õÊ¼µãÎ»ÎªINIT_PACK_POINT
+  * @brief  å†³ç­–æ¨¡å—åˆå§‹åŒ–, è®¾ç½®åˆå§‹ç‚¹ä½ä¸ºINIT_PACK_POINT
   */
 void Decision_Init(decision_t *mode)
 {
@@ -227,17 +254,17 @@ void Decision_Init(decision_t *mode)
 }
 
 /* ================================================================
- *                    ¾ö²ß×´Ì¬Ö÷¿ØÖÆÆ÷
+ *                    å†³ç­–çŠ¶æ€ä¸»æ§åˆ¶å™¨
  * ================================================================ */
 
 /**
-  * @brief  ¾ö²ß×´Ì¬Ö÷¿ØÖÆÆ÷(Ã¿ÖÜÆÚµ÷ÓÃ)
-  * @note   ±ÈÈü½øĞĞÖĞ: ¸üĞÂÅĞ¾öÌõ¼ş->Ò£¿ØÆ÷Ñ¡Ä£Ê½->Ö´ĞĞµãÎ»¾ö²ß
-  *         ·Ç±ÈÈü×´Ì¬: Ç¿ÖÆÉèÎªÄ¿±êÌõ¼şÂú×ã, ¸´Î»ËùÓĞ×´Ì¬
+  * @brief  å†³ç­–çŠ¶æ€ä¸»æ§åˆ¶å™¨(æ¯å‘¨æœŸè°ƒç”¨)
+  * @note   æ¯”èµ›è¿›è¡Œä¸­: æ›´æ–°åˆ¤å†³æ¡ä»¶->é¥æ§å™¨é€‰æ¨¡å¼->æ‰§è¡Œç‚¹ä½å†³ç­–
+  *         éæ¯”èµ›çŠ¶æ€: å¼ºåˆ¶è®¾ä¸ºç›®æ ‡æ¡ä»¶æ»¡è¶³, å¤ä½æ‰€æœ‰çŠ¶æ€
   */
 void Decison_State_Ctl(decision_t *mode)
 {
-    if (game_state.game_progress == 4)
+    if (game_state_local.game_progress == 4)
     {
         Judge_Continuous_Handle(&decision.Judge_condition);
         AGV_auto_mode(mode);
@@ -293,11 +320,11 @@ void Decison_State_Ctl(decision_t *mode)
 }
 
 /* ================================================================
- *                    ¸¨ÖúÅĞ¶Ïº¯Êı
+ *                    è¾…åŠ©åˆ¤æ–­å‡½æ•°
  * ================================================================ */
 
 /**
-  * @brief  ÅĞ¶ÏÊÇ·ñ¾àÀëµĞ·½Ç°ÉÚÕ¾½Ï½ü
+  * @brief  åˆ¤æ–­æ˜¯å¦è·ç¦»æ•Œæ–¹å‰å“¨ç«™è¾ƒè¿‘
   */
 void judge_if_close_to_enemy_out(Judge_condition_t *mode)
 {
@@ -310,7 +337,7 @@ void judge_if_close_to_enemy_out(Judge_condition_t *mode)
 }
 
 /**
-  * @brief  ÅĞ¶Ï¼üÅÌÒ»¼üÊ§ÄÜ/Ê¹ÄÜ, D¼üÊ§ÄÜ, W¼ü»Ö¸´
+  * @brief  åˆ¤æ–­é”®ç›˜ä¸€é”®å¤±èƒ½/ä½¿èƒ½, Dé”®å¤±èƒ½, Wé”®æ¢å¤
   */
 void judge_if_keyboard_disable(decision_t *mode)
 {
@@ -321,7 +348,7 @@ void judge_if_keyboard_disable(decision_t *mode)
 }
 
 /**
-  * @brief  ²âÊÔÓÃ¼òÒ×¾ö²ß(ÑªÁ¿µÍ»Ø²¹¸øÇø, ·ñÔòÈ¥¸ßµØ)
+  * @brief  æµ‹è¯•ç”¨ç®€æ˜“å†³ç­–(è¡€é‡ä½å›è¡¥ç»™åŒº, å¦åˆ™å»é«˜åœ°)
   */
 void sentry_test_decision(decision_t *mode)
 {
@@ -334,13 +361,13 @@ void sentry_test_decision(decision_t *mode)
 uint8_t if_navi_receive = 0;
 
 /* ================================================================
- *                    ¾ö²ßµãÎ»Ñ¡ÔñÓëÂ·ÓÉ
+ *                    å†³ç­–ç‚¹ä½é€‰æ‹©ä¸è·¯ç”±
  * ================================================================ */
 
 /**
-  * @brief  ¾ö²ßµãÎ»Ñ¡Ôñ(ÔÆÌ¨ÊÖ±êµã->Ä£Ê½Â·ÓÉ)
-  * @note   ÔÆÌ¨ÊÖ¸üĞÂµãÎ»Ê±ÇĞ»»µ½AIR_CONTROLÄ£Ê½
-  *         ¾ö²ßÄ£Ê½ÇĞ»»Ê±½«µãÎ»¸´Î»µ½³õÊ¼µã
+  * @brief  å†³ç­–ç‚¹ä½é€‰æ‹©(äº‘å°æ‰‹æ ‡ç‚¹->æ¨¡å¼è·¯ç”±)
+  * @note   äº‘å°æ‰‹æ›´æ–°ç‚¹ä½æ—¶åˆ‡æ¢åˆ°AIR_CONTROLæ¨¡å¼
+  *         å†³ç­–æ¨¡å¼åˆ‡æ¢æ—¶å°†ç‚¹ä½å¤ä½åˆ°åˆå§‹ç‚¹
   */
 void decision_point_chose(decision_t *mode)
 {
@@ -363,7 +390,7 @@ void decision_point_chose(decision_t *mode)
 }
 
 /* ================================================================
- *                ¸÷¾ö²ßÄ£Ê½ÊµÏÖ
+ *                å„å†³ç­–æ¨¡å¼å®ç°
  * ================================================================ */
 
 void sentry_air_control_decision(decision_t *mode)
@@ -397,8 +424,8 @@ void sentry_air_control_decision(decision_t *mode)
 }
 
 /**
-  * @brief  ¼¤½øÄ£Ê½¾ö²ß(Ö÷Õ½Ä£Ê½)
-  * @note   Ö÷¶¯½ø¹¥µĞ·½Ç°ÉÚÕ¾/±¤Àİ, ¸ù¾İÑªÁ¿/µ¯Ò©/»¤¼×µÈÌõ¼şÁ÷×ª
+  * @brief  æ¿€è¿›æ¨¡å¼å†³ç­–(ä¸»æˆ˜æ¨¡å¼)
+  * @note   ä¸»åŠ¨è¿›æ”»æ•Œæ–¹å‰å“¨ç«™/å ¡å’, æ ¹æ®è¡€é‡/å¼¹è¯/æŠ¤ç”²ç­‰æ¡ä»¶æµè½¬
   */
 void sentry_extreme_decision(decision_t *mode)
 {
@@ -579,7 +606,7 @@ void sentry_extreme_decision(decision_t *mode)
 }
 
 /**
-  * @brief  ±£ÊØÄ£Ê½¾ö²ß: ²»Ö÷¶¯ÉÏµĞ·½±¤Àİ, ÓÅÏÈ·ÀÊØ¼º·½ÇøÓò
+  * @brief  ä¿å®ˆæ¨¡å¼å†³ç­–: ä¸ä¸»åŠ¨ä¸Šæ•Œæ–¹å ¡å’, ä¼˜å…ˆé˜²å®ˆå·±æ–¹åŒºåŸŸ
   */
 void sentry_conservative_decision(decision_t *mode)
 {
@@ -653,7 +680,7 @@ void sentry_conservative_decision(decision_t *mode)
 }
 
 /**
-  * @brief  Ñ²ÂßÄ£Ê½¾ö²ß: Ö»´òÇ°ÉÚÕ¾, ²»½øÈëµĞ·½°ë³¡Éî´¦
+  * @brief  å·¡é€»æ¨¡å¼å†³ç­–: åªæ‰“å‰å“¨ç«™, ä¸è¿›å…¥æ•Œæ–¹åŠåœºæ·±å¤„
   */
 void sentry_patrol_decision(decision_t *mode)
 {
@@ -733,7 +760,7 @@ void sentry_patrol_decision(decision_t *mode)
 }
 
 /**
-  * @brief  ·ÉÆÂÄ£Ê½¾ö²ß: ·ÉÆÂÂäµã+´òÇ°ÉÚÕ¾
+  * @brief  é£å¡æ¨¡å¼å†³ç­–: é£å¡è½ç‚¹+æ‰“å‰å“¨ç«™
   */
 void sentry_flying_decision(decision_t *mode)
 {
@@ -813,7 +840,7 @@ void sentry_flying_decision(decision_t *mode)
 }
 
 /**
-  * @brief  ±£»¤Ä£Ê½¾ö²ß(·ÖÇøÈüÉÏ³¡°æ±¾)
+  * @brief  ä¿æŠ¤æ¨¡å¼å†³ç­–(åˆ†åŒºèµ›ä¸Šåœºç‰ˆæœ¬)
   */
 void sentry_protect_decision(decision_t *mode)
 {
@@ -873,7 +900,7 @@ void sentry_protect_decision(decision_t *mode)
 }
 
 /**
-  * @brief  Á½µã¾ö²ßÄ£Ê½: ·ÀÊØµãÓë²¹¸øÇøÖ®¼äÇĞ»», ×î¼òµ¥µÄ±£µ×¾ö²ß
+  * @brief  ä¸¤ç‚¹å†³ç­–æ¨¡å¼: é˜²å®ˆç‚¹ä¸è¡¥ç»™åŒºä¹‹é—´åˆ‡æ¢, æœ€ç®€å•çš„ä¿åº•å†³ç­–
   */
 void sentry_two_point_decision(decision_t *mode)
 {
@@ -911,7 +938,7 @@ void sentry_two_point_decision(decision_t *mode)
 }
 
 /* ================================================================
- *                    ÔÆÌ¨ÊÖ¿ØÖÆÏà¹Ø
+ *                    äº‘å°æ‰‹æ§åˆ¶ç›¸å…³
  * ================================================================ */
 
 void air_control_ctl(decision_t *mode)
@@ -920,8 +947,8 @@ void air_control_ctl(decision_t *mode)
 }
 
 /**
-  * @brief  ÔÆÌ¨ÊÖµØÍ¼±êµã×ªµ¼º½×ø±êÏµ
-  * @note   ºì·½½¨Í¼Ö±½ÓÊ¹ÓÃ, À¶·½×ø±êÏµ·­×ª(28-x,15-y)
+  * @brief  äº‘å°æ‰‹åœ°å›¾æ ‡ç‚¹è½¬å¯¼èˆªåæ ‡ç³»
+  * @note   çº¢æ–¹å»ºå›¾ç›´æ¥ä½¿ç”¨, è“æ–¹åæ ‡ç³»ç¿»è½¬(28-x,15-y)
   */
 void map_control_fill(decision_t *mode)
 {
@@ -936,12 +963,12 @@ void map_control_fill(decision_t *mode)
 }
 
 /* ================================================================
- *                    µ¼º½µãÎ»Ìî³ä
+ *                    å¯¼èˆªç‚¹ä½å¡«å……
  * ================================================================ */
 
 /**
-  * @brief  ¼ÆËãµ¼º½Ä¿±ê×ø±ê²¢Ğ´Èënavigation_tx
-  * @note   ÆÕÍ¨µãÎ»¼ÆËãÏà¶ÔÆ«ÒÆ, ÊÓ¾õËø¶¨Ê±¸ù¾İ×°¼×°å¾àÀëÊµÊ±ÍÆËã
+  * @brief  è®¡ç®—å¯¼èˆªç›®æ ‡åæ ‡å¹¶å†™å…¥navigation_tx
+  * @note   æ™®é€šç‚¹ä½è®¡ç®—ç›¸å¯¹åç§», è§†è§‰é”å®šæ—¶æ ¹æ®è£…ç”²æ¿è·ç¦»å®æ—¶æ¨ç®—
   */
 void decision_point_fill(void)
 {
@@ -1004,11 +1031,11 @@ void decision_point_fill(void)
 }
 
 /* ================================================================
- *                    µ½´ïÅĞ¶Ï
+ *                    åˆ°è¾¾åˆ¤æ–­
  * ================================================================ */
 
 /**
-  * @brief  ÅĞ¶ÏÉÚ±øÊÇ·ñµ½´ïÄ¿±êµãÎ»(Îó²î<0.8m)
+  * @brief  åˆ¤æ–­å“¨å…µæ˜¯å¦åˆ°è¾¾ç›®æ ‡ç‚¹ä½(è¯¯å·®<0.8m)
   */
 void If_Point_arrived(void)
 {
@@ -1055,8 +1082,8 @@ void If_Point_arrived(void)
 }
 
 /**
-  * @brief  ÅĞ¶ÏÊÇ·ñĞèÒªÉÏµĞ·½±¤Àİ
-  * @note   ºì·½: 3/4ºÅ²½±øx>17(µĞ·½°ë³¡); À¶·½: 3/4ºÅ²½±øx<11(µĞ·½°ë³¡)
+  * @brief  åˆ¤æ–­æ˜¯å¦éœ€è¦ä¸Šæ•Œæ–¹å ¡å’
+  * @note   çº¢æ–¹: 3/4å·æ­¥å…µx>17(æ•Œæ–¹åŠåœº); è“æ–¹: 3/4å·æ­¥å…µx<11(æ•Œæ–¹åŠåœº)
   */
 void judge_if_need_to_enemy_fortress(Judge_condition_t *mode)
 {
@@ -1071,7 +1098,7 @@ void judge_if_need_to_enemy_fortress(Judge_condition_t *mode)
 }
 
 /**
-  * @brief  ¾ö²ßµãÇĞ»»¼ì²â(Ô¤Áô, ÔİÎ´ÊµÏÖ)
+  * @brief  å†³ç­–ç‚¹åˆ‡æ¢æ£€æµ‹(é¢„ç•™, æš‚æœªå®ç°)
   */
 void IF_decision_point_change(Judge_condition_t *mode)
 {
@@ -1079,11 +1106,11 @@ void IF_decision_point_change(Judge_condition_t *mode)
 }
 
 /* ================================================================
- *                    ×´Ì¬ÅĞ¶Ïº¯Êı
+ *                    çŠ¶æ€åˆ¤æ–­å‡½æ•°
  * ================================================================ */
 
 /**
-  * @brief  ÅĞ¶Ï»ùµØÊÇ·ñÔÚµõÉä×´Ì¬(³ÖĞø¿ÛÑª>=40)
+  * @brief  åˆ¤æ–­åŸºåœ°æ˜¯å¦åœ¨åŠå°„çŠ¶æ€(æŒç»­æ‰£è¡€>=40)
   */
 void judge_if_chip_base(uint16_t base_hp, Judge_condition_t *mode)
 {
@@ -1098,16 +1125,16 @@ void judge_if_chip_base(uint16_t base_hp, Judge_condition_t *mode)
 }
 
 /**
-  * @brief  ÅĞ¶ÏÊÇ·ñĞèÒª»Ø²¹¸øÇø²¹¸ø17mmµ¯Íè
-  * @note   ·¢µ¯Á¿<50ÇÒÊÓÒ°¶ªÊ§ÇÒ¿É¶Ò»»>=200, »ò·¢µ¯Á¿<5ÇÒÊ£Óà<5s
+  * @brief  åˆ¤æ–­æ˜¯å¦éœ€è¦å›è¡¥ç»™åŒºè¡¥ç»™17mmå¼¹ä¸¸
+  * @note   å‘å¼¹é‡<50ä¸”è§†é‡ä¸¢å¤±ä¸”å¯å…‘æ¢>=200, æˆ–å‘å¼¹é‡<5ä¸”å‰©ä½™<5s
   */
 void judge_if_need_allow_17(Judge_condition_t *mode)
 {
     if (projectile_allowance.projectile_allowance_17mm > last_allowance_17)
         already_allowance_17 += (projectile_allowance.projectile_allowance_17mm - last_allowance_17);
 
-    allow_to_get_17mm = ((420 - game_state.stage_remain_time) / 60) * 100;
-    remain_time = game_state.stage_remain_time % 60;
+    allow_to_get_17mm = ((420 - game_state_local.stage_remain_time) / 60) * 100;
+    remain_time = game_state_local.stage_remain_time % 60;
 
     if ((projectile_allowance.projectile_allowance_17mm < 50
       && receive_gimbal_data.Vision_look_state == vision_lost
@@ -1122,27 +1149,27 @@ void judge_if_need_allow_17(Judge_condition_t *mode)
 }
 
 /**
-  * @brief  ÅĞ¶ÏÉÚ±øÊÇ·ñÎ´ÊÜ»÷³¬¹ıãĞÖµ(3s/5s/10s)
-  * @note   ÊÜ»÷ÅĞ¶¨: ÑªÁ¿µ¥´ÎÏÂ½µ>=10
+  * @brief  åˆ¤æ–­å“¨å…µæ˜¯å¦æœªå—å‡»è¶…è¿‡é˜ˆå€¼(3s/5s/10s)
+  * @note   å—å‡»åˆ¤å®š: è¡€é‡å•æ¬¡ä¸‹é™>=10
   */
 bool judge_if_nothurt(Judge_condition_t *mode)
 {
     static uint16_t Last_HP;
 
-    if (Last_HP - robot_status.current_HP >= 10)
-        hurt_time = game_state.stage_remain_time;
+    if (Last_HP - robot_status_local.current_HP >= 10)
+        hurt_time = game_state_local.stage_remain_time;
 
-    mode->IF_10s_NotHurted = (hurt_time - game_state.stage_remain_time > 10) ? 1 : 0;
-    mode->IF_5s_NotHurted  = (hurt_time - game_state.stage_remain_time > 5)  ? 1 : 0;
-    mode->IF_3s_NotHurted  = (hurt_time - game_state.stage_remain_time > 3)  ? 1 : 0;
+    mode->IF_10s_NotHurted = (hurt_time - game_state_local.stage_remain_time > 10) ? 1 : 0;
+    mode->IF_5s_NotHurted  = (hurt_time - game_state_local.stage_remain_time > 5)  ? 1 : 0;
+    mode->IF_3s_NotHurted  = (hurt_time - game_state_local.stage_remain_time > 3)  ? 1 : 0;
 
-    Last_HP = robot_status.current_HP;
+    Last_HP = robot_status_local.current_HP;
     return mode->IF_3s_NotHurted;
 }
 
 /**
-  * @brief  ÅĞ¶ÏÉÚ±øÊÇ·ñÎ´·¢ÏÖµĞÈË³¬¹ıãĞÖµ
-  * @note   ÊÓ¾õËø¶¨ÇÒÒÑµ½´ïÊ±ÖØÖÃ, µãÎ»ÇĞ»»Ê±ÇåÁã
+  * @brief  åˆ¤æ–­å“¨å…µæ˜¯å¦æœªå‘ç°æ•Œäººè¶…è¿‡é˜ˆå€¼
+  * @note   è§†è§‰é”å®šä¸”å·²åˆ°è¾¾æ—¶é‡ç½®, ç‚¹ä½åˆ‡æ¢æ—¶æ¸…é›¶
   */
 void judge_if_not_found(Judge_condition_t *mode)
 {
@@ -1185,22 +1212,22 @@ void judge_if_allowance_less_100(Judge_condition_t *mode)
 
 void judge_if_HP_less_200(Judge_condition_t *mode)
 {
-    mode->If_hp_less_200 = (robot_status.current_HP <= 150) ? 1 : 0;
+    mode->If_hp_less_200 = (robot_status_local.current_HP <= 150) ? 1 : 0;
 }
 
 void judge_if_HP_less_100(Judge_condition_t *mode)
 {
-    mode->IF_HP_Less_100 = (robot_status.current_HP <= 110) ? 1 : 0;
+    mode->IF_HP_Less_100 = (robot_status_local.current_HP <= 110) ? 1 : 0;
 }
 
 void judge_if_HP_less_50(Judge_condition_t *mode)
 {
-    mode->IF_HP_Less_50 = (robot_status.current_HP <= 70) ? 1 : 0;
+    mode->IF_HP_Less_50 = (robot_status_local.current_HP <= 70) ? 1 : 0;
 }
 
 /**
-  * @brief  ÅĞ¶Ï¼º·½»ùµØ»¤¼×ÊÇ·ñÕ¹¿ª
-  * @note   »ùµØÑªÁ¿<=2200 »ò ÓĞËæ»ú·ÉïÚ »ò ·ÉïÚÃüÖĞ¼ÆÊı´ï4´Î
+  * @brief  åˆ¤æ–­å·±æ–¹åŸºåœ°æŠ¤ç”²æ˜¯å¦å±•å¼€
+  * @note   åŸºåœ°è¡€é‡<=2200 æˆ– æœ‰éšæœºé£é•– æˆ– é£é•–å‘½ä¸­è®¡æ•°è¾¾4æ¬¡
   */
 void judge_base_armor_spred(Judge_condition_t *mode, int16_t base_HP)
 {
@@ -1219,8 +1246,8 @@ void judge_base_armor_spred(Judge_condition_t *mode, int16_t base_HP)
 }
 
 /**
-  * @brief  ÅĞ¶ÏµĞ·½ÊÇ·ñ¿ªÆôĞ¡ÄÜÁ¿»ú¹Ø
-  * @note   Ç°ÉÚÕ¾µ¥´Îµô5µãÇÒÊ£Óà>120sÅĞ¶¨¿ªÆô, ³ÖĞøÔ¼45sºó¸´Î»
+  * @brief  åˆ¤æ–­æ•Œæ–¹æ˜¯å¦å¼€å¯å°èƒ½é‡æœºå…³
+  * @note   å‰å“¨ç«™å•æ¬¡æ‰5ç‚¹ä¸”å‰©ä½™>120såˆ¤å®šå¼€å¯, æŒç»­çº¦45såå¤ä½
   */
 bool judge_if_enemy_small_energy(Judge_condition_t *mode, int16_t outpost_HP)
 {
@@ -1228,14 +1255,14 @@ bool judge_if_enemy_small_energy(Judge_condition_t *mode, int16_t outpost_HP)
 
     if (outpost_HP - Last_outpost_HP == 5
      && mode->If_enemy_small_energy == 0
-     && game_state.stage_remain_time > 120)
+     && game_state_local.stage_remain_time > 120)
     {
-        enemy_small_energy_time = game_state.stage_remain_time;
+        enemy_small_energy_time = game_state_local.stage_remain_time;
         mode->If_enemy_small_energy = 1;
     }
 
     if (mode->If_enemy_small_energy == 1
-     && (enemy_small_energy_time - game_state.stage_remain_time >= 40))
+     && (enemy_small_energy_time - game_state_local.stage_remain_time >= 40))
         mode->If_enemy_small_energy = 0;
 
     Last_outpost_HP = outpost_HP;
@@ -1249,25 +1276,25 @@ void judge_if_outpost_destroyed(Judge_condition_t *mode, int16_t outpost_HP)
 
 void judge_if_fire_lock(Judge_condition_t *mode)
 {
-    if (robot_status.current_HP == 0
-     && robot_status.power_management_shooter_output == 0)
+    if (robot_status_local.current_HP == 0
+     && robot_status_local.power_management_shooter_output == 0)
         mode->IF_fire_lock = 1;
-    else if (robot_status.power_management_shooter_output == 1)
+    else if (robot_status_local.power_management_shooter_output == 1)
         mode->IF_fire_lock = 0;
 }
 
 void judge_if_HP_recover(Judge_condition_t *mode)
 {
-    mode->IF_HP_recover = (robot_status.current_HP == 400) ? 1 : 0;
+    mode->IF_HP_recover = (robot_status_local.current_HP == 400) ? 1 : 0;
 }
 
 /* ================================================================
- *                    µ×ÅÌËÙ¶È¿ØÖÆ
+ *                    åº•ç›˜é€Ÿåº¦æ§åˆ¶
  * ================================================================ */
 
 /**
-  * @brief  ¸ù¾İµ¼º½ÓëÓöµĞ/ÊÜ»÷Çé¿ö×ÔÖ÷Ñ¡Ôñµ×ÅÌÄ£Ê½
-  * @note   µ½´ïÊ±¸ù¾İÊÜ»÷ÇĞ»»ÍÓÂİËÙ¶È; µ¼º½ÖĞ»ÄµØ/UĞÍÍäÎŞÍÓÂİ, ÊÜ»÷Ê±Ìá¸ßÍÓÂİ
+  * @brief  æ ¹æ®å¯¼èˆªä¸é‡æ•Œ/å—å‡»æƒ…å†µè‡ªä¸»é€‰æ‹©åº•ç›˜æ¨¡å¼
+  * @note   åˆ°è¾¾æ—¶æ ¹æ®å—å‡»åˆ‡æ¢é™€èºé€Ÿåº¦; å¯¼èˆªä¸­è’åœ°/Uå‹å¼¯æ— é™€èº, å—å‡»æ—¶æé«˜é™€èº
   */
 void AGV_auto_chassis(decision_t *mode)
 {
@@ -1348,15 +1375,15 @@ void AGV_auto_chassis(decision_t *mode)
 }
 
 /* ================================================================
- *                Á¬Ğø×´Ì¬ÅĞ¶Ï´¦Àí
+ *                è¿ç»­çŠ¶æ€åˆ¤æ–­å¤„ç†
  * ================================================================ */
 
 /**
-  * @brief  Á¬Ğø×´Ì¬ÅĞ¶Ï´¦Àí(Ã¿ÖÜÆÚµ÷ÓÃ, °´Ë³Ğò¸üĞÂËùÓĞÅĞ¾öÌõ¼ş)
+  * @brief  è¿ç»­çŠ¶æ€åˆ¤æ–­å¤„ç†(æ¯å‘¨æœŸè°ƒç”¨, æŒ‰é¡ºåºæ›´æ–°æ‰€æœ‰åˆ¤å†³æ¡ä»¶)
   */
 void Judge_Continuous_Handle(Judge_condition_t *mode)
 {
-    if (game_state.game_progress != 4)
+    if (game_state_local.game_progress != 4)
         return;
 
     If_Point_arrived();
@@ -1399,7 +1426,7 @@ void Judge_Continuous_Handle(Judge_condition_t *mode)
 }
 
 /* ================================================================
- *                ³¡µØ/µØĞÎÅĞ¶Ï
+ *                åœºåœ°/åœ°å½¢åˆ¤æ–­
  * ================================================================ */
 
 void judge_if_fortress_allow_less_50(Judge_condition_t *mode)
@@ -1442,8 +1469,8 @@ void judge_if_enemy_outpost_destroyed(Judge_condition_t *mode, int16_t enemy_out
 }
 
 /**
-  * @brief  ÅĞ¶Ï±¤ÀİÔöÒæÇøÊÇ·ñ¿ÕÏĞ
-  * @note   Í¨¹ı3ºÅºÍ4ºÅ²½±øÎ»ÖÃÅĞ¶ÏÊÇ·ñÓĞÈËÔÚ±¤Àİ
+  * @brief  åˆ¤æ–­å ¡å’å¢ç›ŠåŒºæ˜¯å¦ç©ºé—²
+  * @note   é€šè¿‡3å·å’Œ4å·æ­¥å…µä½ç½®åˆ¤æ–­æ˜¯å¦æœ‰äººåœ¨å ¡å’
   */
 void judge_if_fortress_free(Judge_condition_t *mode)
 {
@@ -1472,13 +1499,13 @@ void judge_if_fortress_free(Judge_condition_t *mode)
 void judge_if_enemy_outpost_lock(Judge_condition_t *mode)
 {
     mode->If_enemy_outpost_lock =
-        (mode->IF_base_armor_spred == 1 || game_state.stage_remain_time < 240) ? 1 : 0;
+        (mode->IF_base_armor_spred == 1 || game_state_local.stage_remain_time < 240) ? 1 : 0;
 }
 
 /**
-  * @brief  ÅĞ¶ÏÊÇ·ñĞèÒªÈ¥±£»¤»ùµØ
-  * @note   ºì·½: Ó¢ĞÛxÔÚ0~1100(¼º·½°ë³¡); À¶·½: Ó¢ĞÛxÔÚ1700~2800
-  *         µ±Ç°Ç¿ÖÆÉèÎª0(´ıÆôÓÃ)
+  * @brief  åˆ¤æ–­æ˜¯å¦éœ€è¦å»ä¿æŠ¤åŸºåœ°
+  * @note   çº¢æ–¹: è‹±é›„xåœ¨0~1100(å·±æ–¹åŠåœº); è“æ–¹: è‹±é›„xåœ¨1700~2800
+  *         å½“å‰å¼ºåˆ¶è®¾ä¸º0(å¾…å¯ç”¨)
   */
 void judge_if_need_to_protect(Judge_condition_t *mode)
 {
@@ -1502,13 +1529,13 @@ void judge_if_need_to_protect(Judge_condition_t *mode)
     else if (decision.robot_data.robot_color == blue)
         mode->IF_need_to_protect = (hero_x.data > 1700 && hero_x.data < 2800) ? 1 : 0;
 
-    mode->IF_need_to_protect = 0;   /* µ±Ç°Ç¿ÖÆ¹Ø±Õ */
+    mode->IF_need_to_protect = 0;   /* å½“å‰å¼ºåˆ¶å…³é—­ */
 }
 
 void judge_if_chassis_weak(void)
 {
     decision.Judge_condition.If_chassis_weak =
-        (game_state.stage_remain_time < 90) ? 1 : 0;
+        (game_state_local.stage_remain_time < 90) ? 1 : 0;
 }
 
 void judge_if_stop_navi(void)
@@ -1518,10 +1545,10 @@ void judge_if_stop_navi(void)
 }
 
 /* ================================================================
- *                    Éä»÷¾ö²ß
+ *                    å°„å‡»å†³ç­–
  * ================================================================ */
 
-/* --- Éä»÷Ìõ¼şÅĞ¶ÏÇ°ÏòÉùÃ÷ --- */
+/* --- å°„å‡»æ¡ä»¶åˆ¤æ–­å‰å‘å£°æ˜ --- */
 bool judge_if_shoot_hero(int16_t robot_hp);
 bool judge_if_shoot_Engineer(int16_t robot_hp);
 bool judge_if_shoot_infantr3(int16_t robot_hp);
@@ -1535,8 +1562,8 @@ void sentry_shoot_decision(decision_t *mode)
 }
 
 /**
-  * @brief  È·¶¨×ÔÃé×î¸ßÓÅÏÈ¼¶Ä¿±ê
-  * @note   ºì·½Ãé×¼À¶·½, À¶·½Ãé×¼ºì·½; ÓÅÏÈ²ĞÑª(5~50)ºÍÓ¢ĞÛ
+  * @brief  ç¡®å®šè‡ªç„æœ€é«˜ä¼˜å…ˆçº§ç›®æ ‡
+  * @note   çº¢æ–¹ç„å‡†è“æ–¹, è“æ–¹ç„å‡†çº¢æ–¹; ä¼˜å…ˆæ®‹è¡€(5~50)å’Œè‹±é›„
   */
 void judge_shoot_top_senior_priority(decision_t *mode)
 {
@@ -1583,11 +1610,11 @@ void judge_shoot_top_senior_priority(decision_t *mode)
 }
 
 /**
-  * @brief  Éä»÷Ìõ¼şÅĞ¶Ï(Ìî³äVision_ByteBitsÎ»Óò)
+  * @brief  å°„å‡»æ¡ä»¶åˆ¤æ–­(å¡«å……Vision_ByteBitsä½åŸŸ)
   */
 void judge_if_shoot(decision_t *mode)
 {
-    if (game_state.game_progress != 4)
+    if (game_state_local.game_progress != 4)
     {
         mode->Vision_ByteBits.shoot_Hero      = 1;
         mode->Vision_ByteBits.shoot_Engineer  = 1;
@@ -1622,11 +1649,11 @@ void judge_if_shoot(decision_t *mode)
 }
 
 /* ================================================================
- *              ¸÷±øÖÖÉä»÷Ìõ¼şÅĞ¶Ï(staticº¯Êı)
+ *              å„å…µç§å°„å‡»æ¡ä»¶åˆ¤æ–­(staticå‡½æ•°)
  * ================================================================ */
 
 /**
-  * @brief  »÷´òÓ¢ĞÛ: ²ĞÑª(<=60)ÀäÈ´9s, ÂúÑª(>=200)ÀäÈ´2s
+  * @brief  å‡»æ‰“è‹±é›„: æ®‹è¡€(<=60)å†·å´9s, æ»¡è¡€(>=200)å†·å´2s
   */
 bool judge_if_shoot_hero(int16_t robot_hp)
 {
@@ -1636,14 +1663,14 @@ bool judge_if_shoot_hero(int16_t robot_hp)
     static uint16_t last_hp;
 
     if (robot_hp <= 60 && robot_hp > 0 && last_hp == 0)
-        wait_tim10 = game_state.stage_remain_time;
+        wait_tim10 = game_state_local.stage_remain_time;
     if (robot_hp >= 200 && last_hp == 0)
-        wait_tim3 = game_state.stage_remain_time;
+        wait_tim3 = game_state_local.stage_remain_time;
 
-    if ((wait_tim10 - game_state.stage_remain_time < 9
-      && wait_tim10 - game_state.stage_remain_time >= 0)
-     || (wait_tim3 - game_state.stage_remain_time < 2
-      && wait_tim3 - game_state.stage_remain_time >= 0))
+    if ((wait_tim10 - game_state_local.stage_remain_time < 9
+      && wait_tim10 - game_state_local.stage_remain_time >= 0)
+     || (wait_tim3 - game_state_local.stage_remain_time < 2
+      && wait_tim3 - game_state_local.stage_remain_time >= 0))
         res = 0;
     else
         res = 1;
@@ -1653,7 +1680,7 @@ bool judge_if_shoot_hero(int16_t robot_hp)
 }
 
 /**
-  * @brief  »÷´ò¹¤³Ì: ²ĞÑª(<=60)ÀäÈ´9s, ÂúÑª(>=150)ÀäÈ´3s
+  * @brief  å‡»æ‰“å·¥ç¨‹: æ®‹è¡€(<=60)å†·å´9s, æ»¡è¡€(>=150)å†·å´3s
   */
 bool judge_if_shoot_Engineer(int16_t robot_hp)
 {
@@ -1663,14 +1690,14 @@ bool judge_if_shoot_Engineer(int16_t robot_hp)
     static uint16_t last_hp;
 
     if (robot_hp <= 60 && robot_hp > 0 && last_hp == 0)
-        wait_tim10 = game_state.stage_remain_time;
+        wait_tim10 = game_state_local.stage_remain_time;
     if (robot_hp >= 150 && last_hp == 0)
-        wait_tim3 = game_state.stage_remain_time;
+        wait_tim3 = game_state_local.stage_remain_time;
 
-    if ((wait_tim10 - game_state.stage_remain_time < 9
-      && wait_tim10 - game_state.stage_remain_time >= 0)
-     || (wait_tim3 - game_state.stage_remain_time < 3
-      && wait_tim3 - game_state.stage_remain_time >= 0))
+    if ((wait_tim10 - game_state_local.stage_remain_time < 9
+      && wait_tim10 - game_state_local.stage_remain_time >= 0)
+     || (wait_tim3 - game_state_local.stage_remain_time < 3
+      && wait_tim3 - game_state_local.stage_remain_time >= 0))
         res = 0;
     else
         res = 1;
@@ -1680,7 +1707,7 @@ bool judge_if_shoot_Engineer(int16_t robot_hp)
 }
 
 /**
-  * @brief  »÷´ò3ºÅ²½±ø: ²ĞÑª(<=40)ÀäÈ´9s, ÂúÑª(>=150)ÀäÈ´3s
+  * @brief  å‡»æ‰“3å·æ­¥å…µ: æ®‹è¡€(<=40)å†·å´9s, æ»¡è¡€(>=150)å†·å´3s
   */
 bool judge_if_shoot_infantr3(int16_t robot_hp)
 {
@@ -1690,14 +1717,14 @@ bool judge_if_shoot_infantr3(int16_t robot_hp)
     static uint16_t last_hp;
 
     if (robot_hp <= 40 && robot_hp > 0 && last_hp == 0)
-        wait_tim10 = game_state.stage_remain_time;
+        wait_tim10 = game_state_local.stage_remain_time;
     if (robot_hp >= 150 && last_hp == 0)
-        wait_tim3 = game_state.stage_remain_time;
+        wait_tim3 = game_state_local.stage_remain_time;
 
-    if ((wait_tim10 - game_state.stage_remain_time < 9
-      && wait_tim10 - game_state.stage_remain_time >= 0)
-     || (wait_tim3 - game_state.stage_remain_time < 3
-      && wait_tim3 - game_state.stage_remain_time >= 0))
+    if ((wait_tim10 - game_state_local.stage_remain_time < 9
+      && wait_tim10 - game_state_local.stage_remain_time >= 0)
+     || (wait_tim3 - game_state_local.stage_remain_time < 3
+      && wait_tim3 - game_state_local.stage_remain_time >= 0))
         res = 0;
     else
         res = 1;
@@ -1707,7 +1734,7 @@ bool judge_if_shoot_infantr3(int16_t robot_hp)
 }
 
 /**
-  * @brief  »÷´ò4ºÅ²½±ø: ²ĞÑª(<=40)ÀäÈ´9s, ÂúÑª(>=150)ÀäÈ´3s
+  * @brief  å‡»æ‰“4å·æ­¥å…µ: æ®‹è¡€(<=40)å†·å´9s, æ»¡è¡€(>=150)å†·å´3s
   */
 bool judge_if_shoot_infantr4(int16_t robot_hp)
 {
@@ -1717,14 +1744,14 @@ bool judge_if_shoot_infantr4(int16_t robot_hp)
     static uint16_t last_hp;
 
     if (robot_hp <= 40 && robot_hp > 0 && last_hp == 0)
-        wait_tim10 = game_state.stage_remain_time;
+        wait_tim10 = game_state_local.stage_remain_time;
     if (robot_hp >= 150 && last_hp == 0)
-        wait_tim3 = game_state.stage_remain_time;
+        wait_tim3 = game_state_local.stage_remain_time;
 
-    if ((wait_tim10 - game_state.stage_remain_time < 9
-      && wait_tim10 - game_state.stage_remain_time >= 0)
-     || (wait_tim3 - game_state.stage_remain_time < 3
-      && wait_tim3 - game_state.stage_remain_time >= 0))
+    if ((wait_tim10 - game_state_local.stage_remain_time < 9
+      && wait_tim10 - game_state_local.stage_remain_time >= 0)
+     || (wait_tim3 - game_state_local.stage_remain_time < 3
+      && wait_tim3 - game_state_local.stage_remain_time >= 0))
         res = 0;
     else
         res = 1;
@@ -1734,7 +1761,7 @@ bool judge_if_shoot_infantr4(int16_t robot_hp)
 }
 
 /**
-  * @brief  »÷´òÉÚ±ø: ÒÑËÀÍö½ûÖ¹, ÂúÑª(>=150)ÀäÈ´2s
+  * @brief  å‡»æ‰“å“¨å…µ: å·²æ­»äº¡ç¦æ­¢, æ»¡è¡€(>=150)å†·å´2s
   */
 bool judge_if_shoot_sentry(int16_t robot_hp, int16_t outpost_HP)
 {
@@ -1749,16 +1776,16 @@ bool judge_if_shoot_sentry(int16_t robot_hp, int16_t outpost_HP)
     if (robot_hp <= 80 && robot_hp > 0 && last_hp == 0)
     {
         if_die = 1;
-        wait_tim10 = game_state.stage_remain_time;
+        wait_tim10 = game_state_local.stage_remain_time;
     }
     if (robot_hp > 80)
         if_die = 0;
     if (robot_hp >= 150 && last_hp == 0)
-        wait_tim3 = game_state.stage_remain_time;
+        wait_tim3 = game_state_local.stage_remain_time;
 
     if (if_die
-     || (wait_tim3 - game_state.stage_remain_time < 2
-      && wait_tim3 - game_state.stage_remain_time >= 0))
+     || (wait_tim3 - game_state_local.stage_remain_time < 2
+      && wait_tim3 - game_state_local.stage_remain_time >= 0))
         res = 0;
     else
         res = 1;
@@ -1768,7 +1795,7 @@ bool judge_if_shoot_sentry(int16_t robot_hp, int16_t outpost_HP)
 }
 
 /**
-  * @brief  »÷´òÇ°ÉÚÕ¾: ½öENEMY_OUTPOST_POINT»òCENTRL_HIGH_POINTÊ±ÔÊĞí
+  * @brief  å‡»æ‰“å‰å“¨ç«™: ä»…ENEMY_OUTPOST_POINTæˆ–CENTRL_HIGH_POINTæ—¶å…è®¸
   */
 bool judge_if_shoot_outpost(uint16_t outpost_hp)
 {
@@ -1778,7 +1805,7 @@ bool judge_if_shoot_outpost(uint16_t outpost_hp)
 }
 
 /**
-  * @brief  »÷´ò»ùµØ: ½öµ±Ç°ÉÚÕ¾ÒÑ±»´İ»Ù
+  * @brief  å‡»æ‰“åŸºåœ°: ä»…å½“å‰å“¨ç«™å·²è¢«æ‘§æ¯
   */
 bool judge_if_shoot_base(int16_t outpost_hp)
 {

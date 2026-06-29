@@ -1,14 +1,14 @@
 #ifndef __NAVIGATION_H
 #define __NAVIGATION_H
 
-#define CONST_HEAD0             0XA5     // Ö¡Í·
-#define CONST_END0              0XAA     // Ö¡Î²
+#define CONST_HEAD0             0XA5     // å¸§å¤´
+#define CONST_END0              0XAA     // å¸§å°¾
 
-#define CONST_HEAD1             0XB0     // Ö¡Í·
-#define CONST_END1              0XBB    // Ö¡Î²
+#define CONST_HEAD1             0XB0     // å¸§å¤´
+#define CONST_END1              0XBB    // å¸§å°¾
 
-#define CONST_HEAD2             0XB1    // Ö¡Í·
-#define CONST_END2              0XBB    // Ö¡Î²
+#define CONST_HEAD2             0XB1    // å¸§å¤´
+#define CONST_END2              0XBB    // å¸§å°¾
 
 #define navigation_tx_len   18
 #include "stdbool.h"
@@ -57,7 +57,7 @@ typedef struct
   Navi_state_t Navi_state;
   uint8_t If_get_path;
   
-//  uint8_t seq;//°üĞòºÅ
+//  uint8_t seq;//åŒ…åºå·
 }navigation_rx_t;
 typedef struct
 {
@@ -98,7 +98,7 @@ typedef struct
  float vx,vy;
  float Vx_c,Vy_c;
  float vx_all[4];
- float init_yaw;  // ¼ì²âÉÏµçÄÇÒ»¿ÌµÄÍÓÂİÒÇÖµ£¬Ö»ÊÇÎªÁËÀï³Ì¼Æ¼ÆËãÓÃ,ºóĞø¿¼ÂÇ
+ float init_yaw;  // æ£€æµ‹ä¸Šç”µé‚£ä¸€åˆ»çš„é™€èºä»ªå€¼ï¼Œåªæ˜¯ä¸ºäº†é‡Œç¨‹è®¡è®¡ç®—ç”¨,åç»­è€ƒè™‘
  float diff_yaw;
  float diff_angle;
  bool yaw_update;
